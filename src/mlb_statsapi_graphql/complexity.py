@@ -4,6 +4,7 @@ The estimate is specific to this small schema, not a general cost engine:
 
 - Each distinct root ``team(id:)`` or ``player(id:)`` costs ROOT_FIELD_COSTS.
 - Each distinct team whose ``roster`` is selected adds ROSTER_COST.
+- Each distinct (team ID, season) whose ``stats`` is selected adds TEAM_STATS_COST.
 - Every other field (scalars, roster entries, introspection) costs 0, because
   it reads data that an earlier upstream call already returned.
 
@@ -37,6 +38,7 @@ from strawberry.extensions import SchemaExtension
 
 ROOT_FIELD_COSTS = {"team": 5, "player": 5}
 ROSTER_COST = 10
+TEAM_STATS_COST = 5
 
 COMPLEXITY_ERROR_MESSAGE = "Query cost exceeds the configured limit."
 
@@ -74,19 +76,25 @@ def estimate_cost(
     }
     entities: set[tuple[str, object]] = set()
     rosters: set[object] = set()
+    team_stats: set[tuple[object, object]] = set()
     for field in _included_fields(operation.selection_set, fragments, variables):
         name = field.name.value
         if name not in ROOT_FIELD_COSTS:
             continue
         id = _id_argument(field, variables)
         entities.add((name, id))
-        if name == "team" and any(
-            subfield.name.value == "roster"
-            for subfield in _included_fields(field.selection_set, fragments, variables)
-        ):
-            rosters.add(id)
+        if name == "team":
+            for subfield in _included_fields(field.selection_set, fragments, variables):
+                if subfield.name.value == "roster":
+                    rosters.add(id)
+                elif subfield.name.value == "stats":
+                    team_stats.add((id, _int_argument(subfield, variables, "season")))
 
-    return sum(ROOT_FIELD_COSTS[name] for name, _ in entities) + ROSTER_COST * len(rosters)
+    return (
+        sum(ROOT_FIELD_COSTS[name] for name, _ in entities)
+        + ROSTER_COST * len(rosters)
+        + TEAM_STATS_COST * len(team_stats)
+    )
 
 
 def _included_fields(
@@ -139,12 +147,16 @@ def _is_included(
 
 
 def _id_argument(field: FieldNode, variables: Mapping[str, Any]) -> object:
+    return _int_argument(field, variables, "id")
+
+
+def _int_argument(field: FieldNode, variables: Mapping[str, Any], name: str) -> object:
     for arg in field.arguments or ():
-        if arg.name.value == "id":
+        if arg.name.value == name:
             value = value_from_ast(arg.value, GraphQLInt, variables)
             if isinstance(value, int):
                 return value
-    # Unknown ID: a fresh object never equals another key, so it is always charged.
+    # Unknown argument: a fresh object never equals another key, so it is charged.
     return object()
 
 

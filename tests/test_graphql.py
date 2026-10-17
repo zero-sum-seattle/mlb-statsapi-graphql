@@ -308,7 +308,7 @@ def test_validation_errors_are_not_masked(api):
     assert "unknownField" in response.json()["errors"][0]["message"]
 
 
-def test_public_schema_is_unchanged():
+def test_public_schema_preserves_existing_fields_and_adds_season_stats():
     from mlb_statsapi_graphql.schema import schema
 
     assert schema.as_str() == """\
@@ -335,7 +335,16 @@ type Team {
   id: Int!
   name: String
   abbreviation: String
+  stats(season: Int!): TeamSeasonStats
   roster: [RosterEntry!]
+}
+
+type TeamSeasonStats {
+  season: Int!
+  wins: Int
+  losses: Int
+  runsScored: Int
+  runsAllowed: Int
 }"""
 
 
