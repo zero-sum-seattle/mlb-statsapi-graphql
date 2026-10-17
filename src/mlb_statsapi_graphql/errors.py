@@ -26,3 +26,12 @@ def should_mask_error(error: GraphQLError) -> bool:
     """
     original = error.original_error
     return original is not None and not isinstance(original, GraphQLError)
+
+
+def require_season(season: int) -> None:
+    """Validate structure, without promising historical coverage."""
+    if not 1000 <= season <= 9999:
+        raise GraphQLError(
+            "Argument 'season' must be a four-digit integer between 1000 and 9999.",
+            extensions={"code": "BAD_USER_INPUT"},
+        )

@@ -12,9 +12,10 @@ Instead of building separate REST calls for a team and its active roster, reques
 
 - **Team lookup** by MLB team ID: `id`, `name`, and `abbreviation`
 - **Person lookup** by MLB person ID: `id` and `fullName` (the upstream endpoint may include non-players)
+- **Regular-season team statistics** by season: wins, losses, runs scored, and runs allowed
 - **Active team rosters** with nested player and position fields, loaded only when requested
 - **Async upstream access** with a shared per-process `AsyncMlb` client and HTTP connection pool
-- **Request-scoped DataLoaders** that deduplicate repeated team, person, and active-roster lookups
+- **Request-scoped DataLoaders** that deduplicate repeated team, person, active-roster, and team-season statistics lookups
 - **Shared upstream concurrency cap** with request-local timing and structured server logs
 - **Query safeguards** for depth, cost, aliases, and document size
 - **Client-safe GraphQL errors** and an offline test suite
@@ -58,6 +59,47 @@ query {
 ```
 
 This requests the Seattle Mariners and their **current active roster**. Roster membership varies; it is not a historical or 40-man roster query.
+
+### Example: team season statistics
+
+```graphql
+query {
+  team(id: 136) {
+    name
+    stats(season: 2024) {
+      season
+      wins
+      losses
+      runsScored
+      runsAllowed
+    }
+  }
+}
+```
+
+`Team.stats(season: Int!): TeamSeasonStats` loads only when selected. The season
+must be a four-digit integer between 1000 and 9999; this validates its structure,
+not the availability of MLB data for that year. These are **regular-season** totals
+(`gameType="R"`), excluding spring training and postseason games.
+
+| Field | Type | Definition |
+| --- | --- | --- |
+| `season` | `Int!` | Requested season |
+| `wins` | `Int` | Team wins from season-total pitching statistics |
+| `losses` | `Int` | Team losses from season-total pitching statistics |
+| `runsScored` | `Int` | Runs from season-total hitting statistics |
+| `runsAllowed` | `Int` | Runs from season-total pitching statistics, including unearned runs |
+
+The `stats` object is nullable. Missing, empty, or ambiguous statistics return
+`null` when none of the four values is available; partial results keep available
+values and return `null` for unavailable fields. Actual zeros stay zero. A group
+must have a unique matching whole-team season split; multiple matching splits are
+never summed or arbitrarily selected. Supplied season, team, and game-type
+metadata must match; absent optional metadata is accepted. Upstream failures use
+the existing error behavior, rather than being treated as missing data.
+
+Within a request, aliases share one lookup per `(team ID, season)`. Different
+seasons or teams require separate lookups, and caches do not survive the request.
 
 ### Example: individual person
 
@@ -119,7 +161,7 @@ Defaults are intentionally simple and configurable:
 | Maximum document tokens | 1,000 | `MLB_GRAPHQL_MAX_TOKENS` |
 | Maximum concurrent upstream lookups per worker | 10 | `MLB_GRAPHQL_MAX_CONCURRENCY` |
 
-The cost estimator currently charges **5** per distinct root team or person lookup and **10** per distinct requested team roster. These are relative weights, **not** exact request counts or latency predictions. Duplicate selections of the same ID are counted once to reflect DataLoader caching.
+The cost estimator currently charges **5** per distinct root team or person lookup and **10** per distinct requested team roster, plus **5** per distinct `(team ID, season)` whose statistics are requested. A team with one stats season costs **10**; requesting a second season raises that to **15**. These are relative weights, **not** exact request counts or latency predictions. Duplicate selections of the same ID are counted once to reflect DataLoader caching.
 
 Example override:
 
@@ -139,7 +181,7 @@ service, allowing several independent lookups while reducing bursts. It is not a
 benchmark-derived capacity or an MLB quota. Tune it for your workload.
 
 One **semaphore** (a fixed pool of permits) is created during FastAPI lifespan.
-Team, person, and active-roster lookups all acquire from that same pool across
+Team, person, active-roster, and team-season statistics lookups all acquire from that same pool across
 requests. A permit is held through the entire library method, including retries,
 backoff, and parsing, and released on success, failure, or cancellation. Request
 cleanup cancels and awaits unfinished DataLoader lookups before logging totals.
@@ -169,7 +211,7 @@ Existing server-side error traceback logs remain available.
 
 | Event / field | Definition |
 | --- | --- |
-| `mlb_upstream_lookup` | One completed or cancelled logical lookup, with `request_id`, `lookup_kind` (`team`, `person`, `roster`), `admitted`, and `outcome` (`success`, `error`, `cancelled`) |
+| `mlb_upstream_lookup` | One completed or cancelled logical lookup, with `request_id`, `lookup_kind` (`team`, `person`, `roster`, `team_stats`), `admitted`, and `outcome` (`success`, `error`, `cancelled`) |
 | `queue_wait_seconds` | Time from reaching admission to acquiring a permit; for cancellation while waiting, time spent waiting until cancellation |
 | `lookup_seconds` | Time after admission until the library method returns, raises, or is cancelled; includes library retries, retry delays, JSON decoding, and model parsing |
 | `mlb_graphql_request` | Request cleanup summary with the same `request_id` |
@@ -197,7 +239,7 @@ remain outside this milestone.
 
 | Error code | Meaning |
 | --- | --- |
-| `BAD_USER_INPUT` | An ID must be a positive integer |
+| `BAD_USER_INPUT` | An ID must be positive, or a season must be between 1000 and 9999 |
 | `UPSTREAM_ERROR` | An MLB lookup or response failed |
 | `QUERY_COMPLEXITY_LIMIT` | Estimated operation cost exceeds the configured limit |
 
@@ -225,6 +267,7 @@ Tests mock the upstream `AsyncMlb` client; they do not require live MLB API acce
 | `context.py` / `loaders.py` | Request context and DataLoader caching |
 | `complexity.py` / `settings.py` | Query cost estimation and configurable limits |
 | `upstream.py` | Shared admission, request statistics, and structured lookup logs |
+| `team_stats.py` | Select unambiguous upstream season totals |
 | `errors.py` | Shared client-safe error helpers |
 
 Source files live under `src/mlb_statsapi_graphql/`; tests live under `tests/`.
@@ -237,6 +280,7 @@ Source files live under `src/mlb_statsapi_graphql/`; tests live under `tests/`.
 - [x] **M2.1** — Request-scoped DataLoader caching
 - [x] **M2.2** — Query depth, cost, alias, and token limits
 - [x] **M2.3** — Bounded upstream concurrency and observability
+- [x] **M3.1** — Season-based team statistics
 - [ ] **Future** — Assess broader queries, real batching where safe, operational hardening, and deployment
 
 Roadmap items are goals, not delivery commitments. The project is evolving and breaking changes remain possible.

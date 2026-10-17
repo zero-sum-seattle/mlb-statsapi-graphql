@@ -222,25 +222,34 @@ def test_concurrency_configuration(monkeypatch):
         create_app()
 
 
-def test_cancelled_http_request_cleans_up_detached_loader_work(caplog):
+@pytest.mark.parametrize("stats", [False, True])
+def test_cancelled_http_request_cleans_up_detached_loader_work(caplog, stats):
     caplog.set_level(logging.INFO, logger="mlb_statsapi_graphql.upstream")
 
     async def scenario():
         mlb = fake_mlb()
         entered, exited = asyncio.Event(), asyncio.Event()
 
-        async def blocked(id):
+        async def blocked(id, **kwargs):
             entered.set()
             try:
                 await asyncio.Event().wait()
             finally:
                 exited.set()
 
-        mlb.get_team.side_effect = blocked
+        if stats:
+            mlb.get_team.return_value = Team(id=136, link="/x")
+            mlb.get_team_stats.side_effect = blocked
+        else:
+            mlb.get_team.side_effect = blocked
         app = create_app(lambda: mlb, upstream_settings=UpstreamSettings(1))
         async with app.router.lifespan_context(app):
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as api:
-                request = asyncio.create_task(api.post("/graphql", json={"query": "{team(id:136){id}}"}))
+                query = (
+                    "{team(id:136){stats(season:2024){wins}}}" if stats
+                    else "{team(id:136){id}}"
+                )
+                request = asyncio.create_task(api.post("/graphql", json={"query": query}))
                 await entered.wait()
                 request.cancel()
                 with pytest.raises(asyncio.CancelledError):
@@ -253,7 +262,8 @@ def test_cancelled_http_request_cleans_up_detached_loader_work(caplog):
 
     asyncio.run(asyncio.wait_for(scenario(), 5))
     cancelled, successful = summaries(caplog)
-    assert cancelled.lookup_count == cancelled.cancellation_count == 1
+    assert cancelled.lookup_count == (2 if stats else 1)
+    assert cancelled.cancellation_count == 1
     assert successful.lookup_count == 1
     assert successful.cancellation_count == 0
 

@@ -66,3 +66,14 @@ class Loaders:
                 ), "roster"
             )
         )
+
+        self.team_stats: DataLoader[tuple[int, int], dict] = DataLoader(
+            lambda keys: _fetch_each(
+                keys, lambda key: lookups.run(
+                    "team_stats", lambda: mlb.get_team_stats(
+                        key[0], stats=["season"], groups=["hitting", "pitching"],
+                        season=key[1], gameType="R",
+                    )
+                ), "team stats"
+            )
+        )
