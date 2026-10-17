@@ -163,6 +163,33 @@ Defaults are intentionally simple and configurable:
 
 The cost estimator currently charges **5** per distinct root team or person lookup and **10** per distinct requested team roster, plus **5** per distinct `(team ID, season)` whose statistics are requested. A team with one stats season costs **10**; requesting a second season raises that to **15**. These are relative weights, **not** exact request counts or latency predictions. Duplicate selections of the same ID are counted once to reflect DataLoader caching.
 
+Every custom resolver declares `metadata=priced(weight, request=..., result=...)`
+next to its Strawberry field. Explicit weight `0` declares a resolver with no
+upstream work. The estimator resolves fields through graphql-core's schema and
+recursively reads these declarations at any depth, honoring the selected
+operation, fragments, aliases, directives, and argument/variable defaults.
+A schema guard test fails if any custom resolver lacks a declaration.
+
+`request(parent, args)` returns a hashable loader cache identity: `("team", id)`,
+`("player", id)`, `("roster", team_id)`, or `("team_stats", team_id, season)`.
+Known identical requests are charged once. `result(parent, args)` separately
+identifies the returned object for descendants; it defaults to unknown (`None`),
+as does the request identity. Unknown identities are charged separately, which
+can overestimate work across aliases.
+
+List-producing fields may declare `max_items` only when their resolver contract
+guarantees a finite maximum. Downstream costs multiply by the maximum number of
+potential distinct parents (for nested list layers, bounds multiply). List element
+identities are unknown; globally known identical request keys still deduplicate.
+Without a bound, unknown downstream requests have infinite estimated cost and
+are rejected by the normal `QUERY_COMPLEXITY_LIMIT` enforcement before execution.
+Free descendants remain selectable. No roster bound is assumed: MLB roster
+rules alone do not guarantee an API response size. Existing roster queries keep
+their costs, but adding a costed descendant requires a defensible bound or a
+provably shared request identity. Bounds are declarations, not runtime truncation;
+maintainers must keep them consistent with resolver behavior. Abstract return
+types conservatively sum possible branches, which can also overestimate.
+
 Example override:
 
 ```bash
@@ -289,7 +316,7 @@ Roadmap items are goals, not delivery commitments. The project is evolving and b
 
 This repository is a **WIP learning project**, not a production service. The GraphQL schema exposes a small subset of the capabilities of [python-mlb-statsapi](https://github.com/zero-sum-seattle/python-mlb-statsapi). Live responses depend on MLB availability and may change over time. Active roster data may be empty or unavailable; the upstream library may treat a roster 404 as an empty list.
 
-If you add a new field that performs upstream I/O, **review its query-cost weight**; otherwise the existing estimator could undercount its work.
+Every custom resolver must explicitly declare its query cost; the schema guard test enforces this requirement, including explicit zero-cost declarations.
 
 Feedback and contributions are welcome through GitHub issues and pull requests.
 
