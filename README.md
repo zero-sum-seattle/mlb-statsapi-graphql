@@ -163,24 +163,30 @@ Defaults are intentionally simple and configurable:
 
 The cost estimator currently charges **5** per distinct root team or person lookup and **10** per distinct requested team roster, plus **5** per distinct `(team ID, season)` whose statistics are requested. A team with one stats season costs **10**; requesting a second season raises that to **15**. These are relative weights, **not** exact request counts or latency predictions. Duplicate selections of the same ID are counted once to reflect DataLoader caching.
 
-Every custom resolver declares `metadata=priced(weight, request=..., result=...)`
-next to its Strawberry field. Explicit weight `0` declares a resolver with no
-upstream work. The estimator resolves fields through graphql-core's schema and
+Every custom resolver declares `metadata=priced(weight, request_key=..., result_key=...)`
+next to its Strawberry field; `max_items` is another optional keyword. Explicit
+weight `0` declares a resolver with no upstream work. The estimator resolves fields through graphql-core's schema and
 recursively reads these declarations at any depth, honoring the selected
 operation, fragments, aliases, directives, and argument/variable defaults.
 A schema guard test fails if any custom resolver lacks a declaration.
+Strawberry validates documents before the request cost check; standalone
+`estimate_cost()` also validates its input before using the same traversal.
+The estimator requires Strawberry >=0.335.0 and graphql-core >=3.3.0,<3.4
+for its field-collection and variable-coercion APIs.
 
-`request(parent, args)` returns a hashable loader cache identity: `("team", id)`,
+`request_key(parent_key, args)` returns a hashable loader cache identity: `("team", id)`,
 `("player", id)`, `("roster", team_id)`, or `("team_stats", team_id, season)`.
-Known identical requests are charged once. `result(parent, args)` separately
+Known identical requests are charged once. `result_key(parent_key, args)` separately
 identifies the returned object for descendants; it defaults to unknown (`None`),
-as does the request identity. Unknown identities are charged separately, which
-can overestimate work across aliases.
+as does the request identity. For example, a team lookup uses request key
+`("team", id)` to deduplicate upstream work and result key `id` so descendants
+can form their own roster and stats request keys. Unknown identities are charged
+separately, which can overestimate work across aliases.
 
 List-producing fields may declare `max_items` only when their resolver contract
 guarantees a finite maximum. Downstream costs multiply by the maximum number of
-potential distinct parents (for nested list layers, bounds multiply). List element
-identities are unknown; globally known identical request keys still deduplicate.
+possible parent objects (`parent_count`; for nested list layers, bounds multiply).
+List element identities are unknown; globally known identical request keys still deduplicate.
 Without a bound, unknown downstream requests have infinite estimated cost and
 are rejected by the normal `QUERY_COMPLEXITY_LIMIT` enforcement before execution.
 Free descendants remain selectable. No roster bound is assumed: MLB roster

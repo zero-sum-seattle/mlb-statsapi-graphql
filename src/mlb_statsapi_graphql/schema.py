@@ -20,14 +20,14 @@ from .types import Player, Team
 class Query:
     player: Player | None = strawberry.field(
         resolver=resolve_player, metadata=priced(
-            5, request=lambda parent, args: ("player", args["id"]),
-            result=lambda parent, args: args["id"],
+            5, request_key=lambda parent, args: ("player", args["id"]),
+            result_key=lambda parent, args: args["id"],
         ),
     )
     team: Team | None = strawberry.field(
         resolver=resolve_team, metadata=priced(
-            5, request=lambda parent, args: ("team", args["id"]),
-            result=lambda parent, args: args["id"],
+            5, request_key=lambda parent, args: ("team", args["id"]),
+            result_key=lambda parent, args: args["id"],
         ),
     )
 

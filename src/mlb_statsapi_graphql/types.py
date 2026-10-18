@@ -48,7 +48,7 @@ class Team:
     abbreviation: str | None
 
     @strawberry.field(metadata=priced(
-        5, request=lambda parent, args: ("team_stats", parent, args["season"])
+        5, request_key=lambda parent, args: ("team_stats", parent, args["season"])
         if parent is not None else None,
     ))
     async def stats(self, info: Info[Context, None], season: int) -> TeamSeasonStats | None:
@@ -73,7 +73,7 @@ class Team:
         return result
 
     @strawberry.field(metadata=priced(
-        10, request=lambda parent, args: ("roster", parent)
+        10, request_key=lambda parent, args: ("roster", parent)
         if parent is not None else None,
     ))
     async def roster(self, info: Info[Context, None]) -> list[RosterEntry] | None:

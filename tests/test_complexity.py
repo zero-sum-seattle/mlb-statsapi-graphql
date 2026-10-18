@@ -1,11 +1,15 @@
 """Declaration guard and schema-independent recursive cost regressions."""
 
+import asyncio
 import math
+from unittest.mock import Mock
 
 import pytest
 import strawberry
+import strawberry.schema.schema as strawberry_schema
 from graphql import parse
 
+from mlb_statsapi_graphql import complexity
 from mlb_statsapi_graphql.complexity import QueryCostLimiter, estimate_cost
 from mlb_statsapi_graphql.costs import priced, unpriced_resolvers
 from mlb_statsapi_graphql.schema import schema
@@ -14,14 +18,14 @@ from mlb_statsapi_graphql.schema import schema
 @strawberry.type
 class Leaf:
     @strawberry.field(metadata=priced(
-        5, request=lambda parent, args: ("lookup", parent, args["season"])
+        5, request_key=lambda parent, args: ("lookup", parent, args["season"])
         if parent is not None else None,
     ))
     def value(self, season: int = 2026) -> int:
         return season
 
     @strawberry.field(metadata=priced(
-        2, request=lambda parent, args: ("constant", args["id"]),
+        2, request_key=lambda parent, args: ("constant", args["id"]),
     ))
     def constant(self, id: int = 1) -> int:
         return id
@@ -29,14 +33,14 @@ class Leaf:
 
 @strawberry.type
 class Wrapper:
-    leaf: Leaf = strawberry.field(metadata=priced(0, result=lambda parent, args: parent))
+    leaf: Leaf = strawberry.field(metadata=priced(0, result_key=lambda parent, args: parent))
 
 
 @strawberry.type
 class CostQuery:
     @strawberry.field(metadata=priced(
-        3, request=lambda parent, args: ("wrapper", args["id"]),
-        result=lambda parent, args: args["id"],
+        3, request_key=lambda parent, args: ("wrapper", args["id"]),
+        result_key=lambda parent, args: args["id"],
     ))
     def wrapper(self, id: int = 7) -> Wrapper:
         return Wrapper(leaf=Leaf())
@@ -115,6 +119,54 @@ def test_unbounded_list_rejected_before_execution():
     assert result.errors[0].extensions["code"] == "QUERY_COMPLEXITY_LIMIT"
 
 
-def test_invalid_operation():
-    assert cost("{ missing }") is None
-    assert cost("query($s: Int!) { wrapper { leaf { value(season: $s) } } }") is None
+@pytest.mark.parametrize("query, variables", [
+    ("{ missing }", None),
+    ('{ wrapper { leaf { value(season: "invalid") } } }', None),
+    ("{ wrapper { ...F } } fragment F on Wrapper { ...F }", None),
+    ("query($s: Int!) { wrapper { leaf { value(season: $s) } } }", None),
+    ("query($s: Int!) { wrapper { leaf { value(season: $s) } } }", {"s": "invalid"}),
+    ("query($skip: Boolean!) { wrapper @skip(if: $skip) { leaf { value } } }",
+     {"skip": "invalid"}),
+])
+def test_invalid_operation(query, variables):
+    assert cost(query, variables) is None
+
+
+@pytest.mark.parametrize("execute_async", [False, True])
+@pytest.mark.parametrize("query, rejected", [
+    ("{ wrapper { leaf { value } } }", False),
+    ("{ unbounded { leaf { value } } }", True),
+])
+def test_request_validates_document_once(monkeypatch, execute_async, query, rejected):
+    validate = Mock(wraps=complexity.validate)
+    monkeypatch.setattr(strawberry_schema, "validate", validate)
+    monkeypatch.setattr(complexity, "validate", validate)
+
+    result = (asyncio.run(fixture_schema.execute(query)) if execute_async
+              else fixture_schema.execute_sync(query))
+
+    if rejected:
+        assert result.data is None
+        assert result.errors[0].extensions["code"] == "QUERY_COMPLEXITY_LIMIT"
+    else:
+        assert result.errors is None
+        assert result.data == {"wrapper": {"leaf": {"value": 2026}}}
+    assert validate.call_count == 1
+
+    # Standalone callers still validate, then use the same cost traversal.
+    assert cost(query) == (math.inf if rejected else 8)
+    assert validate.call_count == 2
+
+
+def test_priced_defaults():
+    declaration = priced(0)["cost"]
+    assert declaration.weight == 0
+    assert declaration.request_key(7, {}) is None
+    assert declaration.result_key(7, {}) is None
+    assert declaration.max_items is None
+
+
+@pytest.mark.parametrize("weight, max_items", [(-1, None), (0, -1)])
+def test_priced_rejects_negative_cost_or_bound(weight, max_items):
+    with pytest.raises(ValueError, match="Costs and cardinality bounds must be nonnegative"):
+        priced(weight, max_items=max_items)

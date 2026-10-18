@@ -64,8 +64,20 @@ def estimate_cost(
     None covers validation errors, a missing or ambiguous operation, and invalid variables. In
     those cases graphql-core reports an error before running any resolver.
     """
+    if validate(schema, document):
+        return None
+    return _estimate_validated_cost(schema, document, operation_name, raw_variables)
+
+
+def _estimate_validated_cost(
+    schema: GraphQLSchema,
+    document: DocumentNode,
+    operation_name: str | None,
+    raw_variables: Mapping[str, Any] | None,
+) -> float | None:
+    """Estimate a validated document; operation selection and variables still need checking."""
     operation = get_operation_ast(document, operation_name)
-    if operation is None or operation.operation != OperationType.QUERY or validate(schema, document):
+    if operation is None or operation.operation != OperationType.QUERY:
         return None
     variables = get_variable_values(
         schema, operation.variable_definitions or (), dict(raw_variables or {})
@@ -83,9 +95,9 @@ def estimate_cost(
 class _CostEstimate:
     """Per-operation state for one cost estimate.
 
-    ``parent_key`` is the identity the parent field's ``Cost.result`` returned
-    (for example a team ID), or None when it is unknown. ``count`` is how many
-    distinct parents a field may run for, multiplied by list bounds.
+    ``parent_key`` is the identity the parent field's ``Cost.result_key`` returned
+    (for example a team ID), or None when it is unknown. ``parent_count`` is the
+    number of possible parent objects a field may run for, multiplied by list bounds.
     """
 
     def __init__(
@@ -115,10 +127,10 @@ class _CostEstimate:
         type_: GraphQLObjectType,
         fields: GroupedFieldSet,
         parent_key: Hashable | None,
-        count: float,
+        parent_count: float,
     ) -> float:
         return sum(
-            self._field_cost(type_, details, parent_key, count) for details in fields.values()
+            self._field_cost(type_, details, parent_key, parent_count) for details in fields.values()
         )
 
     def _field_cost(
@@ -126,7 +138,7 @@ class _CostEstimate:
         parent_type: GraphQLObjectType,
         details: FieldDetailsList,
         parent_key: Hashable | None,
-        count: float,
+        parent_count: float,
     ) -> float:
         """Return the cost of one response key, including its subfields."""
         node = details[0].node
@@ -138,14 +150,14 @@ class _CostEstimate:
             # Defense in depth if a schema bypasses the declaration guard.
             return math.inf
         args = get_argument_values(field, node, self.variables, details[0].fragment_variable_values)
-        total = self._charge(cost, cost.request(parent_key, args), count)
+        total = self._charge(cost, cost.request_key(parent_key, args), parent_count)
 
         depth = _list_depth(field.type)
         if depth:
             # One scalar identity cannot describe distinct list elements.
-            child_key, child_count = None, _bounded(count, cost.max_items, depth)
+            child_key, child_count = None, _bounded(parent_count, cost.max_items, depth)
         else:
-            child_key, child_count = cost.result(parent_key, args), count
+            child_key, child_count = cost.result_key(parent_key, args), parent_count
         output = get_named_type(field.type)
         return total + self._subfields_cost(output, details, child_key, child_count)
 
@@ -154,15 +166,15 @@ class _CostEstimate:
         type_: GraphQLNamedType,
         details: FieldDetailsList,
         parent_key: Hashable | None,
-        count: float,
+        parent_count: float,
     ) -> float:
-        if count == 0:
+        if parent_count == 0:
             return 0
         if is_abstract_type(type_):
             # Sum possible runtime branches conservatively; shared request keys
             # are still deduplicated across branches.
             return sum(
-                self._subfields_cost(possible, details, parent_key, count)
+                self._subfields_cost(possible, details, parent_key, parent_count)
                 for possible in self.schema.get_possible_types(type_)
             )
         if not is_object_type(type_):
@@ -170,14 +182,14 @@ class _CostEstimate:
         subfields = collect_subfields(
             self.schema, self.fragments, self.variables, self.operation, type_, details
         )
-        return self._fields_cost(type_, subfields.grouped_field_set, parent_key, count)
+        return self._fields_cost(type_, subfields.grouped_field_set, parent_key, parent_count)
 
-    def _charge(self, cost: Cost, request_key: Hashable | None, count: float) -> float:
+    def _charge(self, cost: Cost, request_key: Hashable | None, parent_count: float) -> float:
         """Charge a request once if its key is known, otherwise once per parent."""
         if not cost.weight:
             return 0
         if request_key is None:
-            return cost.weight * count
+            return cost.weight * parent_count
         if request_key in self.charged:
             return 0
         self.charged.add(request_key)
@@ -210,11 +222,11 @@ def _list_depth(type_: GraphQLOutputType) -> int:
     return depth
 
 
-def _bounded(count: float, max_items: int | None, depth: int) -> float:
-    """Multiply count by max_items once per list layer; None means unbounded."""
+def _bounded(parent_count: float, max_items: int | None, depth: int) -> float:
+    """Multiply parent_count by max_items once per list layer; None means unbounded."""
     if max_items == 0:
-        return 0  # Checked first so an infinite count becomes 0, not 0 * inf.
-    return count * (math.inf if max_items is None else max_items) ** depth
+        return 0  # Checked first so an infinite parent count becomes 0, not 0 * inf.
+    return parent_count * (math.inf if max_items is None else max_items) ** depth
 
 
 class QueryCostLimiter(SchemaExtension):
@@ -231,7 +243,8 @@ class QueryCostLimiter(SchemaExtension):
     def on_execute(self) -> Iterator[None]:
         context = self.execution_context
         assert context.graphql_document is not None
-        cost = estimate_cost(
+        # Strawberry has already validated the document, but has not coerced variables.
+        cost = _estimate_validated_cost(
             # Strawberry exposes the underlying graphql-core schema as _schema.
             context.schema._schema,
             context.graphql_document,
