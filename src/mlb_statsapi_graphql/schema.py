@@ -9,6 +9,7 @@ from strawberry.extensions import (
 )
 
 from .complexity import QueryCostLimiter
+from .costs import priced
 from .errors import should_mask_error
 from .resolvers import resolve_player, resolve_team
 from .settings import Limits
@@ -17,8 +18,18 @@ from .types import Player, Team
 
 @strawberry.type
 class Query:
-    player: Player | None = strawberry.field(resolver=resolve_player)
-    team: Team | None = strawberry.field(resolver=resolve_team)
+    player: Player | None = strawberry.field(
+        resolver=resolve_player, metadata=priced(
+            5, request_key=lambda parent, args: ("player", args["id"]),
+            result_key=lambda parent, args: args["id"],
+        ),
+    )
+    team: Team | None = strawberry.field(
+        resolver=resolve_team, metadata=priced(
+            5, request_key=lambda parent, args: ("team", args["id"]),
+            result_key=lambda parent, args: args["id"],
+        ),
+    )
 
 
 def create_schema(limits: Limits) -> strawberry.Schema:

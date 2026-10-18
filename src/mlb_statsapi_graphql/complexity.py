@@ -1,44 +1,50 @@
-"""Estimate the upstream cost of an operation and reject it before execution.
+"""Estimate an operation's upstream cost from field ``Cost`` declarations.
 
-The estimate is specific to this small schema, not a general cost engine:
+The estimate visits the fields execution would run, collected by graphql-core
+itself, and adds up each field's declared ``Cost``:
 
-- Each distinct root ``team(id:)`` or ``player(id:)`` costs ROOT_FIELD_COSTS.
-- Each distinct team whose ``roster`` is selected adds ROSTER_COST.
-- Each distinct (team ID, season) whose ``stats`` is selected adds TEAM_STATS_COST.
-- Every other field (scalars, roster entries, introspection) costs 0, because
-  it reads data that an earlier upstream call already returned.
-
-"Distinct" mirrors the request-scoped DataLoaders: aliases that load the same
-ID share one upstream call, so they are charged once. Only the operation that
-will execute is walked, honouring fragments, @skip/@include, and variables.
-When an ID cannot be known before execution it is charged as a new entity.
+- A request with a known key (for example ``("team", 147)``) is charged once,
+  mirroring the request-scoped DataLoader caches.
+- A request with an unknown key is charged once per possible parent.
+- A list field multiplies the possible parents below it by ``max_items``. An
+  unbounded list makes any costed request below it infinite, so it is rejected.
 """
 
-from collections.abc import Iterator, Mapping
+import math
+from collections.abc import Hashable, Iterator, Mapping
 from typing import Any
 
 from graphql import (
     DocumentNode,
-    FieldNode,
     FragmentDefinitionNode,
-    FragmentSpreadNode,
-    GraphQLBoolean,
     GraphQLError,
-    GraphQLInt,
+    GraphQLField,
+    GraphQLList,
+    GraphQLNamedType,
+    GraphQLNonNull,
+    GraphQLObjectType,
+    GraphQLOutputType,
     GraphQLSchema,
-    InlineFragmentNode,
+    OperationDefinitionNode,
     OperationType,
-    SelectionSetNode,
+    get_named_type,
     get_operation_ast,
-    value_from_ast,
+    is_abstract_type,
+    is_object_type,
+    validate,
 )
 from graphql import ExecutionResult as GraphQLExecutionResult
-from graphql.execution import get_variable_values
+from graphql.execution import VariableValues, get_argument_values, get_variable_values
+from graphql.execution.collect_fields import (
+    FieldDetailsList,
+    FragmentDetails,
+    GroupedFieldSet,
+    collect_fields,
+    collect_subfields,
+)
 from strawberry.extensions import SchemaExtension
 
-ROOT_FIELD_COSTS = {"team": 5, "player": 5}
-ROSTER_COST = 10
-TEAM_STATS_COST = 5
+from .costs import Cost
 
 COMPLEXITY_ERROR_MESSAGE = "Query cost exceeds the configured limit."
 
@@ -52,112 +58,175 @@ def estimate_cost(
     document: DocumentNode,
     operation_name: str | None,
     raw_variables: Mapping[str, Any] | None,
-) -> int | None:
+) -> float | None:
     """Return the estimated cost, or None when the operation cannot execute.
 
-    None covers a missing or ambiguous operation and invalid variables. In
+    None covers validation errors, a missing or ambiguous operation, and invalid variables. In
     those cases graphql-core reports an error before running any resolver.
     """
+    if validate(schema, document):
+        return None
+    return _estimate_validated_cost(schema, document, operation_name, raw_variables)
+
+
+def _estimate_validated_cost(
+    schema: GraphQLSchema,
+    document: DocumentNode,
+    operation_name: str | None,
+    raw_variables: Mapping[str, Any] | None,
+) -> float | None:
+    """Estimate a validated document; operation selection and variables still need checking."""
     operation = get_operation_ast(document, operation_name)
     if operation is None or operation.operation != OperationType.QUERY:
         return None
-    coerced = get_variable_values(
+    variables = get_variable_values(
         schema, operation.variable_definitions or (), dict(raw_variables or {})
     )
-    if isinstance(coerced, list):  # a list of variable coercion errors
+    if isinstance(variables, list):  # a list of variable coercion errors
         return None
-    # graphql-core 3.3 wraps coerced values; older versions return a plain dict.
-    variables = getattr(coerced, "coerced", coerced)
-
     fragments = {
-        definition.name.value: definition
+        definition.name.value: FragmentDetails(definition)
         for definition in document.definitions
         if isinstance(definition, FragmentDefinitionNode)
     }
-    entities: set[tuple[str, object]] = set()
-    rosters: set[object] = set()
-    team_stats: set[tuple[object, object]] = set()
-    for field in _included_fields(operation.selection_set, fragments, variables):
-        name = field.name.value
-        if name not in ROOT_FIELD_COSTS:
-            continue
-        id = _id_argument(field, variables)
-        entities.add((name, id))
-        if name == "team":
-            for subfield in _included_fields(field.selection_set, fragments, variables):
-                if subfield.name.value == "roster":
-                    rosters.add(id)
-                elif subfield.name.value == "stats":
-                    team_stats.add((id, _int_argument(subfield, variables, "season")))
-
-    return (
-        sum(ROOT_FIELD_COSTS[name] for name, _ in entities)
-        + ROSTER_COST * len(rosters)
-        + TEAM_STATS_COST * len(team_stats)
-    )
+    return _CostEstimate(schema, fragments, variables, operation).total()
 
 
-def _included_fields(
-    selection_set: SelectionSetNode | None,
-    fragments: Mapping[str, FragmentDefinitionNode],
-    variables: Mapping[str, Any],
-    visited: frozenset[str] = frozenset(),
-) -> Iterator[FieldNode]:
-    """Yield the fields that execution would run, flattening fragments.
+class _CostEstimate:
+    """Per-operation state for one cost estimate.
 
-    This schema has no interfaces or unions, so validation guarantees every
-    fragment's type condition matches and type conditions can be ignored.
+    ``parent_key`` is the identity the parent field's ``Cost.result_key`` returned
+    (for example a team ID), or None when it is unknown. ``parent_count`` is the
+    number of possible parent objects a field may run for, multiplied by list bounds.
     """
-    if selection_set is None:
-        return
-    for selection in selection_set.selections:
-        if not _is_included(selection, variables):
-            continue
-        if isinstance(selection, FieldNode):
-            yield selection
-        elif isinstance(selection, InlineFragmentNode):
-            yield from _included_fields(selection.selection_set, fragments, variables, visited)
-        elif isinstance(selection, FragmentSpreadNode):
-            name = selection.name.value
-            # Validation already rejects fragment cycles; this is a backstop.
-            if name in visited or name not in fragments:
-                continue
-            yield from _included_fields(
-                fragments[name].selection_set, fragments, variables, visited | {name}
-            )
 
+    def __init__(
+        self,
+        schema: GraphQLSchema,
+        fragments: dict[str, FragmentDetails],
+        variables: VariableValues,
+        operation: OperationDefinitionNode,
+    ) -> None:
+        self.schema = schema
+        self.fragments = fragments
+        self.variables = variables
+        self.operation = operation
+        # Request keys already charged; mirrors the request-scoped loader caches.
+        self.charged: set[Hashable] = set()
 
-def _is_included(
-    node: FieldNode | InlineFragmentNode | FragmentSpreadNode, variables: Mapping[str, Any]
-) -> bool:
-    """Apply @skip(if:) and @include(if:) the way execution does."""
-    for directive in node.directives or ():
-        name = directive.name.value
-        if name not in ("skip", "include"):
-            continue
-        condition = next(
-            (arg.value for arg in directive.arguments if arg.name.value == "if"), None
+    def total(self) -> float:
+        query_type = self.schema.query_type
+        assert query_type is not None
+        root = collect_fields(
+            self.schema, self.fragments, self.variables, query_type, self.operation
         )
-        value = value_from_ast(condition, GraphQLBoolean, variables) if condition else None
-        if not isinstance(value, bool):
-            continue  # Unknown: keep the field, which can only overestimate.
-        if (name == "skip") == value:
-            return False
-    return True
+        return self._fields_cost(query_type, root.grouped_field_set, None, 1)
+
+    def _fields_cost(
+        self,
+        type_: GraphQLObjectType,
+        fields: GroupedFieldSet,
+        parent_key: Hashable | None,
+        parent_count: float,
+    ) -> float:
+        return sum(
+            self._field_cost(type_, details, parent_key, parent_count) for details in fields.values()
+        )
+
+    def _field_cost(
+        self,
+        parent_type: GraphQLObjectType,
+        details: FieldDetailsList,
+        parent_key: Hashable | None,
+        parent_count: float,
+    ) -> float:
+        """Return the cost of one response key, including its subfields."""
+        node = details[0].node
+        if node.name.value.startswith("__"):
+            return 0
+        field = parent_type.fields[node.name.value]
+        cost = _declared_cost(field)
+        if cost is None:
+            # Defense in depth if a schema bypasses the declaration guard.
+            return math.inf
+        args = get_argument_values(field, node, self.variables, details[0].fragment_variable_values)
+        total = self._charge(cost, cost.request_key(parent_key, args), parent_count)
+
+        depth = _list_depth(field.type)
+        if depth:
+            # One scalar identity cannot describe distinct list elements.
+            child_key, child_count = None, _bounded(parent_count, cost.max_items, depth)
+        else:
+            child_key, child_count = cost.result_key(parent_key, args), parent_count
+        output = get_named_type(field.type)
+        return total + self._subfields_cost(output, details, child_key, child_count)
+
+    def _subfields_cost(
+        self,
+        type_: GraphQLNamedType,
+        details: FieldDetailsList,
+        parent_key: Hashable | None,
+        parent_count: float,
+    ) -> float:
+        if parent_count == 0:
+            return 0
+        if is_abstract_type(type_):
+            # Sum possible runtime branches conservatively; shared request keys
+            # are still deduplicated across branches.
+            return sum(
+                self._subfields_cost(possible, details, parent_key, parent_count)
+                for possible in self.schema.get_possible_types(type_)
+            )
+        if not is_object_type(type_):
+            return 0
+        subfields = collect_subfields(
+            self.schema, self.fragments, self.variables, self.operation, type_, details
+        )
+        return self._fields_cost(type_, subfields.grouped_field_set, parent_key, parent_count)
+
+    def _charge(self, cost: Cost, request_key: Hashable | None, parent_count: float) -> float:
+        """Charge a request once if its key is known, otherwise once per parent."""
+        if not cost.weight:
+            return 0
+        if request_key is None:
+            return cost.weight * parent_count
+        if request_key in self.charged:
+            return 0
+        self.charged.add(request_key)
+        return cost.weight
 
 
-def _id_argument(field: FieldNode, variables: Mapping[str, Any]) -> object:
-    return _int_argument(field, variables, "id")
+_FREE = Cost(0)
 
 
-def _int_argument(field: FieldNode, variables: Mapping[str, Any], name: str) -> object:
-    for arg in field.arguments or ():
-        if arg.name.value == name:
-            value = value_from_ast(arg.value, GraphQLInt, variables)
-            if isinstance(value, int):
-                return value
-    # Unknown argument: a fresh object never equals another key, so it is charged.
-    return object()
+def _declared_cost(field: GraphQLField) -> Cost | None:
+    """Return the field's declared Cost, or None for an undeclared resolver.
+
+    Plain attribute fields read data their parent already loaded, so they are free.
+    """
+    definition = (field.extensions or {}).get("strawberry-definition")
+    cost = definition.metadata.get("cost") if definition else None
+    if isinstance(cost, Cost):
+        return cost
+    if definition is not None and definition.base_resolver is not None:
+        return None
+    return _FREE
+
+
+def _list_depth(type_: GraphQLOutputType) -> int:
+    """Count list layers, so ``[[Team]]`` has depth 2."""
+    depth = 0
+    while isinstance(type_, (GraphQLNonNull, GraphQLList)):
+        depth += isinstance(type_, GraphQLList)
+        type_ = type_.of_type
+    return depth
+
+
+def _bounded(parent_count: float, max_items: int | None, depth: int) -> float:
+    """Multiply parent_count by max_items once per list layer; None means unbounded."""
+    if max_items == 0:
+        return 0  # Checked first so an infinite parent count becomes 0, not 0 * inf.
+    return parent_count * (math.inf if max_items is None else max_items) ** depth
 
 
 class QueryCostLimiter(SchemaExtension):
@@ -174,7 +243,8 @@ class QueryCostLimiter(SchemaExtension):
     def on_execute(self) -> Iterator[None]:
         context = self.execution_context
         assert context.graphql_document is not None
-        cost = estimate_cost(
+        # Strawberry has already validated the document, but has not coerced variables.
+        cost = _estimate_validated_cost(
             # Strawberry exposes the underlying graphql-core schema as _schema.
             context.schema._schema,
             context.graphql_document,

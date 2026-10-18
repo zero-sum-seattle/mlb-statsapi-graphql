@@ -290,6 +290,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "graphql-core" },
     { name = "python-mlb-statsapi", extra = ["async"] },
     { name = "strawberry-graphql", extra = ["fastapi"] },
     { name = "uvicorn" },
@@ -304,8 +305,9 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115,<1" },
+    { name = "graphql-core", specifier = ">=3.3.0,<3.4" },
     { name = "python-mlb-statsapi", extras = ["async"], specifier = ">=1.1.2,<1.2" },
-    { name = "strawberry-graphql", extras = ["fastapi"], specifier = ">=0.280,<1" },
+    { name = "strawberry-graphql", extras = ["fastapi"], specifier = ">=0.335.0,<1" },
     { name = "uvicorn", specifier = ">=0.30,<1" },
 ]
 

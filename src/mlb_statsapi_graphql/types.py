@@ -9,6 +9,7 @@ import strawberry
 from strawberry.types import Info
 
 from .context import Context
+from .costs import priced
 from .errors import require_season, upstream_error
 from .loaders import UPSTREAM_EXCEPTIONS
 from .team_stats import season_total
@@ -46,7 +47,10 @@ class Team:
     name: str | None
     abbreviation: str | None
 
-    @strawberry.field
+    @strawberry.field(metadata=priced(
+        5, request_key=lambda parent, args: ("team_stats", parent, args["season"])
+        if parent is not None else None,
+    ))
     async def stats(self, info: Info[Context, None], season: int) -> TeamSeasonStats | None:
         require_season(season)
         try:
@@ -68,7 +72,10 @@ class Team:
             return None
         return result
 
-    @strawberry.field
+    @strawberry.field(metadata=priced(
+        10, request_key=lambda parent, args: ("roster", parent)
+        if parent is not None else None,
+    ))
     async def roster(self, info: Info[Context, None]) -> list[RosterEntry] | None:
         # Runs only when roster is selected, after the team itself has resolved.
         # Aliased selections of the same team share one loader call.
