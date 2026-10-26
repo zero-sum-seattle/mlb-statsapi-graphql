@@ -1,0 +1,197 @@
+{
+  "source": "https://statsapi.mlb.com/api/v1/people/665742/stats?season=2022&gameType=R&sportIds=1&stats=season&group=hitting&group=pitching",
+  "capturedAt": "2026-10-26T00:50:27.165777+00:00",
+  "status": 200,
+  "body": {
+    "copyright": "Copyright 2026 MLB Advanced Media, L.P.  Use of any content on this page acknowledges agreement to the terms posted here http://gdx.mlb.com/components/copyright.txt",
+    "stats": [
+      {
+        "type": {
+          "displayName": "season"
+        },
+        "group": {
+          "displayName": "hitting"
+        },
+        "exemptions": [],
+        "splits": [
+          {
+            "season": "2022",
+            "stat": {
+              "age": 23,
+              "gamesPlayed": 153,
+              "groundOuts": 162,
+              "airOuts": 139,
+              "runs": 93,
+              "doubles": 25,
+              "triples": 2,
+              "homeRuns": 27,
+              "strikeOuts": 96,
+              "baseOnBalls": 135,
+              "intentionalWalks": 6,
+              "hits": 127,
+              "hitByPitch": 4,
+              "avg": ".242",
+              "atBats": 524,
+              "obp": ".401",
+              "slg": ".452",
+              "ops": ".853",
+              "caughtStealing": 2,
+              "stolenBases": 6,
+              "stolenBasePercentage": ".750",
+              "caughtStealingPercentage": ".250",
+              "groundIntoDoublePlay": 12,
+              "numberOfPitches": 2765,
+              "plateAppearances": 664,
+              "totalBases": 237,
+              "rbi": 62,
+              "leftOnBase": 203,
+              "sacBunts": 0,
+              "sacFlies": 0,
+              "babip": ".249",
+              "groundOutsToAirouts": "1.17",
+              "catchersInterference": 1,
+              "atBatsPerHomeRun": "19.41"
+            },
+            "player": {
+              "id": 665742,
+              "fullName": "Juan Soto",
+              "link": "/api/v1/people/665742"
+            },
+            "league": {
+              "id": 104,
+              "name": "National League",
+              "link": "/api/v1/league/104"
+            },
+            "sport": {
+              "id": 1,
+              "link": "/api/v1/sports/1",
+              "abbreviation": "MLB"
+            },
+            "gameType": "R",
+            "numTeams": 2
+          },
+          {
+            "season": "2022",
+            "stat": {
+              "age": 23,
+              "gamesPlayed": 101,
+              "groundOuts": 109,
+              "airOuts": 87,
+              "runs": 62,
+              "doubles": 17,
+              "triples": 1,
+              "homeRuns": 21,
+              "strikeOuts": 62,
+              "baseOnBalls": 91,
+              "intentionalWalks": 4,
+              "hits": 84,
+              "hitByPitch": 3,
+              "avg": ".246",
+              "atBats": 342,
+              "obp": ".408",
+              "slg": ".485",
+              "ops": ".893",
+              "caughtStealing": 2,
+              "stolenBases": 6,
+              "stolenBasePercentage": ".750",
+              "caughtStealingPercentage": ".250",
+              "groundIntoDoublePlay": 11,
+              "numberOfPitches": 1819,
+              "plateAppearances": 436,
+              "totalBases": 166,
+              "rbi": 46,
+              "leftOnBase": 137,
+              "sacBunts": 0,
+              "sacFlies": 0,
+              "babip": ".243",
+              "groundOutsToAirouts": "1.25",
+              "catchersInterference": 0,
+              "atBatsPerHomeRun": "16.29"
+            },
+            "team": {
+              "id": 120,
+              "name": "Washington Nationals",
+              "link": "/api/v1/teams/120"
+            },
+            "player": {
+              "id": 665742,
+              "fullName": "Juan Soto",
+              "link": "/api/v1/people/665742"
+            },
+            "league": {
+              "id": 104,
+              "name": "National League",
+              "link": "/api/v1/league/104"
+            },
+            "sport": {
+              "id": 1,
+              "link": "/api/v1/sports/1",
+              "abbreviation": "MLB"
+            },
+            "gameType": "R"
+          },
+          {
+            "season": "2022",
+            "stat": {
+              "age": 23,
+              "gamesPlayed": 52,
+              "groundOuts": 53,
+              "airOuts": 52,
+              "runs": 31,
+              "doubles": 8,
+              "triples": 1,
+              "homeRuns": 6,
+              "strikeOuts": 34,
+              "baseOnBalls": 44,
+              "intentionalWalks": 2,
+              "hits": 43,
+              "hitByPitch": 1,
+              "avg": ".236",
+              "atBats": 182,
+              "obp": ".388",
+              "slg": ".390",
+              "ops": ".778",
+              "caughtStealing": 0,
+              "stolenBases": 0,
+              "stolenBasePercentage": ".---",
+              "caughtStealingPercentage": ".---",
+              "groundIntoDoublePlay": 1,
+              "numberOfPitches": 946,
+              "plateAppearances": 228,
+              "totalBases": 71,
+              "rbi": 16,
+              "leftOnBase": 66,
+              "sacBunts": 0,
+              "sacFlies": 0,
+              "babip": ".261",
+              "groundOutsToAirouts": "1.02",
+              "catchersInterference": 1,
+              "atBatsPerHomeRun": "30.33"
+            },
+            "team": {
+              "id": 135,
+              "name": "San Diego Padres",
+              "link": "/api/v1/teams/135"
+            },
+            "player": {
+              "id": 665742,
+              "fullName": "Juan Soto",
+              "link": "/api/v1/people/665742"
+            },
+            "league": {
+              "id": 104,
+              "name": "National League",
+              "link": "/api/v1/league/104"
+            },
+            "sport": {
+              "id": 1,
+              "link": "/api/v1/sports/1",
+              "abbreviation": "MLB"
+            },
+            "gameType": "R"
+          }
+        ]
+      }
+    ]
+  }
+}

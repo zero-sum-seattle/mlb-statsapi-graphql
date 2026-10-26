@@ -1,0 +1,81 @@
+{
+  "source": "https://statsapi.mlb.com/api/v1/people/665742/stats?season=2024&gameType=R&sportIds=1&stats=season&group=hitting&group=pitching",
+  "capturedAt": "2026-10-26T00:50:26.998606+00:00",
+  "status": 200,
+  "body": {
+    "copyright": "Copyright 2026 MLB Advanced Media, L.P.  Use of any content on this page acknowledges agreement to the terms posted here http://gdx.mlb.com/components/copyright.txt",
+    "stats": [
+      {
+        "type": {
+          "displayName": "season"
+        },
+        "group": {
+          "displayName": "hitting"
+        },
+        "exemptions": [],
+        "splits": [
+          {
+            "season": "2024",
+            "stat": {
+              "age": 25,
+              "gamesPlayed": 157,
+              "groundOuts": 162,
+              "airOuts": 133,
+              "runs": 128,
+              "doubles": 31,
+              "triples": 4,
+              "homeRuns": 41,
+              "strikeOuts": 119,
+              "baseOnBalls": 129,
+              "intentionalWalks": 2,
+              "hits": 166,
+              "hitByPitch": 4,
+              "avg": ".288",
+              "atBats": 576,
+              "obp": ".419",
+              "slg": ".569",
+              "ops": ".988",
+              "caughtStealing": 4,
+              "stolenBases": 7,
+              "stolenBasePercentage": ".636",
+              "caughtStealingPercentage": ".364",
+              "groundIntoDoublePlay": 10,
+              "numberOfPitches": 2960,
+              "plateAppearances": 713,
+              "totalBases": 328,
+              "rbi": 109,
+              "leftOnBase": 203,
+              "sacBunts": 0,
+              "sacFlies": 4,
+              "babip": ".298",
+              "groundOutsToAirouts": "1.22",
+              "catchersInterference": 0,
+              "atBatsPerHomeRun": "14.05"
+            },
+            "team": {
+              "id": 147,
+              "name": "New York Yankees",
+              "link": "/api/v1/teams/147"
+            },
+            "player": {
+              "id": 665742,
+              "fullName": "Juan Soto",
+              "link": "/api/v1/people/665742"
+            },
+            "league": {
+              "id": 103,
+              "name": "American League",
+              "link": "/api/v1/league/103"
+            },
+            "sport": {
+              "id": 1,
+              "link": "/api/v1/sports/1",
+              "abbreviation": "MLB"
+            },
+            "gameType": "R"
+          }
+        ]
+      }
+    ]
+  }
+}
