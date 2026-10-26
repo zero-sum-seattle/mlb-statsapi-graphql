@@ -314,6 +314,8 @@ Source files live under `src/mlb_statsapi_graphql/`; tests live under `tests/`.
 - [x] **M2.2** — Query depth, cost, alias, and token limits
 - [x] **M2.3** — Bounded upstream concurrency and observability
 - [x] **M3.1** — Season-based team statistics
+- [ ] **M3.2** — [Statistics research and architecture](docs/m3.2-statistics-architecture.md) ([#10](https://github.com/zero-sum-seattle/mlb-statsapi-graphql/issues/10)); design milestone, pending PR acceptance; no public schema changes
+- [ ] **Proposed M3.3** — [Basic player season hitting and pitching splits](docs/m3.3-player-season-statistics-plan.md); follow-up implementation after M3.2 review
 - [ ] **Future** — Assess broader queries, real batching where safe, operational hardening, and deployment
 
 Roadmap items are goals, not delivery commitments. The project is evolving and breaking changes remain possible.

@@ -1,0 +1,180 @@
+{
+  "source": "https://statsapi.mlb.com/api/v1/people/660271/stats?season=2023&gameType=R&sportIds=1&stats=season&group=hitting&group=pitching",
+  "capturedAt": "2026-10-26T00:50:27.823578+00:00",
+  "status": 200,
+  "body": {
+    "copyright": "Copyright 2026 MLB Advanced Media, L.P.  Use of any content on this page acknowledges agreement to the terms posted here http://gdx.mlb.com/components/copyright.txt",
+    "stats": [
+      {
+        "type": {
+          "displayName": "season"
+        },
+        "group": {
+          "displayName": "hitting"
+        },
+        "exemptions": [],
+        "splits": [
+          {
+            "season": "2023",
+            "stat": {
+              "age": 28,
+              "gamesPlayed": 135,
+              "groundOuts": 103,
+              "airOuts": 103,
+              "runs": 102,
+              "doubles": 26,
+              "triples": 8,
+              "homeRuns": 44,
+              "strikeOuts": 143,
+              "baseOnBalls": 91,
+              "intentionalWalks": 21,
+              "hits": 151,
+              "hitByPitch": 3,
+              "avg": ".304",
+              "atBats": 497,
+              "obp": ".412",
+              "slg": ".654",
+              "ops": "1.066",
+              "caughtStealing": 6,
+              "stolenBases": 20,
+              "stolenBasePercentage": ".769",
+              "caughtStealingPercentage": ".231",
+              "groundIntoDoublePlay": 9,
+              "numberOfPitches": 2321,
+              "plateAppearances": 599,
+              "totalBases": 325,
+              "rbi": 95,
+              "leftOnBase": 194,
+              "sacBunts": 0,
+              "sacFlies": 3,
+              "babip": ".342",
+              "groundOutsToAirouts": "1.00",
+              "catchersInterference": 5,
+              "atBatsPerHomeRun": "11.30"
+            },
+            "team": {
+              "id": 108,
+              "name": "Los Angeles Angels",
+              "link": "/api/v1/teams/108"
+            },
+            "player": {
+              "id": 660271,
+              "fullName": "Shohei Ohtani",
+              "link": "/api/v1/people/660271"
+            },
+            "league": {
+              "id": 103,
+              "name": "American League",
+              "link": "/api/v1/league/103"
+            },
+            "sport": {
+              "id": 1,
+              "link": "/api/v1/sports/1",
+              "abbreviation": "MLB"
+            },
+            "gameType": "R"
+          }
+        ]
+      },
+      {
+        "type": {
+          "displayName": "season"
+        },
+        "group": {
+          "displayName": "pitching"
+        },
+        "exemptions": [],
+        "splits": [
+          {
+            "season": "2023",
+            "stat": {
+              "age": 28,
+              "gamesPlayed": 23,
+              "gamesStarted": 23,
+              "groundOuts": 114,
+              "airOuts": 98,
+              "runs": 50,
+              "doubles": 15,
+              "triples": 0,
+              "homeRuns": 18,
+              "strikeOuts": 167,
+              "baseOnBalls": 55,
+              "intentionalWalks": 0,
+              "hits": 85,
+              "hitByPitch": 11,
+              "avg": ".184",
+              "atBats": 463,
+              "obp": ".285",
+              "slg": ".333",
+              "ops": ".618",
+              "caughtStealing": 3,
+              "stolenBases": 5,
+              "stolenBasePercentage": ".625",
+              "caughtStealingPercentage": ".375",
+              "groundIntoDoublePlay": 16,
+              "numberOfPitches": 2094,
+              "era": "3.14",
+              "inningsPitched": "132.0",
+              "wins": 10,
+              "losses": 5,
+              "saves": 0,
+              "saveOpportunities": 0,
+              "holds": 0,
+              "blownSaves": 0,
+              "earnedRuns": 46,
+              "whip": "1.06",
+              "battersFaced": 531,
+              "outs": 396,
+              "gamesPitched": 23,
+              "completeGames": 1,
+              "shutouts": 1,
+              "strikes": 1337,
+              "strikePercentage": ".640",
+              "hitBatsmen": 11,
+              "balks": 0,
+              "wildPitches": 12,
+              "pickoffs": 0,
+              "totalBases": 154,
+              "groundOutsToAirouts": "1.16",
+              "winPercentage": ".667",
+              "pitchesPerInning": "15.86",
+              "gamesFinished": 0,
+              "strikeoutWalkRatio": "3.04",
+              "strikeoutsPer9Inn": "11.39",
+              "walksPer9Inn": "3.75",
+              "hitsPer9Inn": "5.80",
+              "runsScoredPer9": "3.41",
+              "homeRunsPer9": "1.23",
+              "inheritedRunners": 0,
+              "inheritedRunnersScored": 0,
+              "catchersInterference": 1,
+              "sacBunts": 0,
+              "sacFlies": 1
+            },
+            "team": {
+              "id": 108,
+              "name": "Los Angeles Angels",
+              "link": "/api/v1/teams/108"
+            },
+            "player": {
+              "id": 660271,
+              "fullName": "Shohei Ohtani",
+              "link": "/api/v1/people/660271"
+            },
+            "league": {
+              "id": 103,
+              "name": "American League",
+              "link": "/api/v1/league/103"
+            },
+            "sport": {
+              "id": 1,
+              "link": "/api/v1/sports/1",
+              "abbreviation": "MLB"
+            },
+            "gameType": "R"
+          }
+        ]
+      }
+    ]
+  }
+}
